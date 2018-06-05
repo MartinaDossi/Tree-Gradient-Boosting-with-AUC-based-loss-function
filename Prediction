@@ -1,0 +1,17 @@
+pred_grad <- function(object, newdata, type="vector", ...) {
+  var <- object$final.result[, 1]
+  split <- object$final.result[, 2]
+  sum <- 0
+  for (m in 1:length(var)) {
+    y.hat <- rep(object$final.result[m, 3], dim(newdata)[1])
+    y.hat[newdata[, var[m]] > split[m]] <- object$final.result[m, 4]
+    sum <- sum + (object$shrinkage)*y.hat
+  }
+  if (type == "vector") 
+    pred <- (sum - min(sum))/(max(sum) - min(sum)) 
+  # Note that "pred" is not a probability estimation. 
+  # Although it belongs to [0,1] it is just a confidence level for the positive class.
+  if (type == "class") 
+    pred <- as.factor(ifelse(sum > 0, 1, -1)) # Sign of the predicted class (+/- 1).
+  return(pred)
+}
