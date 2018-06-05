@@ -1,0 +1,70 @@
+grad_auc <- function(X, y, Tmax, shrinkage = 0.5, gamma = 0.7) {
+  stump <- function(X, y, g, h) {
+    cut.points <- apply(X, 2, function(x) list(sort(unique(x))[-length(unique(x))] + 
+                                                 diff(sort(unique(x)))/2))
+    objectives <- vector("list", dim(X)[2])
+    for (j in 1:dim(X)[2]) {
+      cut.singlevar <- unlist(cut.points[[j]])
+      for (i in 1:length(cut.singlevar)) {
+        split.point <- cut.singlevar[i] 
+        G1 <- sum(g[X[, j] < split.point]) # Nodo a sx
+        H1 <- sum(h[X[, j] < split.point]) 
+        G2 <- sum(g[X[, j] > split.point]) # Nodo a dx
+        H2 <- sum(h[X[, j] > split.point])
+        objectives[[j]][i] <- -((G1^2)/H1 + (G2^2)/H2)/2  
+        objectives[[j]][i][is.na(objectives[[j]][i])] <- 0
+      }
+    }
+    x.sel <- paste("x", which.min(rapply(objectives, min)), sep = "") 
+    min.ind <- rapply(objectives, which.min)[which.min(rapply(objectives, min))]
+    min.value <- unlist(cut.points[[x.sel]])[min.ind]
+    G1 <- sum(g[X[, x.sel] < min.value])
+    H1 <- sum(h[X[, x.sel] < min.value])
+    G2 <- sum(g[X[, x.sel] > min.value])
+    H2 <- sum(h[X[, x.sel] > min.value])
+    y.hat <- ifelse(X[, x.sel] < min.value, -G1/H1, -G2/H2)
+    return(result = list(y.hat = y.hat, x.sel = x.sel, min.value = min.value,
+                         sc.sx = -G1/H1, sc.dx = -G2/H2))
+  }
+  final.result <- data.frame(Var = 0, Split = 0, Score.sx = 0, Score.dx = 0)
+  colnames(X) <- paste("x", 1:ncol(X), sep = "")
+  Tp <- sum(y == 1)
+  Tn <- sum(y == -1)
+  f.hat <- rep(0, length(y)) # Previsione inziale, costante = 0 
+  for (t in 1:Tmax) {
+    g <- rep(0, length(y))
+    h <- rep(0, length(y))
+    for (i in 2:length(y)) {
+      sum1 <- 0 # Per g_i
+      sum2 <- 0 # Per h_i
+      j <- 1
+      if (y[i] == 1) { 
+        for (j in 1:(i-1)) {
+          sum1 <- sum1 + ifelse(y[j]==-1, ifelse((f.hat[i] - f.hat[j]) < gamma,
+                                                 2*(f.hat[i] - f.hat[j] - gamma), 0), 0)/(Tp*Tn)
+          sum2 <- sum2 + ifelse(y[j]==-1, ifelse((f.hat[i] - f.hat[j]) < gamma,
+                                                 2, 0), 0)/(Tp*Tn)
+        } 
+      }
+      if (y[i] == -1) { 
+        for (j in 1:(i-1)) {
+          sum1 <- sum1 + ifelse(y[j] == 1, ifelse((f.hat[j] - f.hat[i]) < gamma,
+                                                  -2*(f.hat[j] - f.hat[i] - gamma), 0), 0)/(Tp*Tn)
+          sum2 <- sum2 + ifelse(y[j] == 1, ifelse((f.hat[j] - f.hat[i]) < gamma,
+                                                  2, 0), 0)/(Tp*Tn)
+        } 
+      }
+      g[i] <- sum1
+      h[i] <- sum2 
+    }
+    f <- stump(X, y, g, h)
+    f.hat <- f.hat + shrinkage*f$y.hat
+    # Per le previsioni su nuovi dati:
+    final.result[t, ] <- c(f$x.sel, f$min.value, f$sc.sx, f$sc.dx)
+  }
+  final.result[, 2] <- as.numeric(final.result[, 2])
+  final.result[, 3] <- as.numeric(final.result[, 3])
+  final.result[, 4] <- as.numeric(final.result[, 4])
+  output <- list(f.hat = f.hat, final.result = final.result, shrinkage = shrinkage)
+  return(output)
+}
