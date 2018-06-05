@@ -1,3 +1,9 @@
+Gradient boosting with stump as base model and loss function based on an approximation of (1-AUC).
+The code has been costructed following the XGBoost formulation (Chen, Tianqi, and Carlos Guestrin. "Xgboost: A scalable tree boosting system." Proceedings of the 22nd acm sigkdd international conference on knowledge discovery and data mining. ACM, 2016).
+The loss function has been derived thanks to:
+Yan, Lian, et al. "Optimizing classifier performance via an approximation to the Wilcoxon-Mann-Whitney statistic." Proceedings of the 20th International Conference on Machine Learning (ICML-03). 2003.
+Zhao, Peilin, et al. "Online AUC maximization." (2011).
+
 grad_auc <- function(X, y, Tmax, shrinkage = 0.5, gamma = 0.7) {
   stump <- function(X, y, g, h) {
     cut.points <- apply(X, 2, function(x) list(sort(unique(x))[-length(unique(x))] + 
@@ -7,9 +13,9 @@ grad_auc <- function(X, y, Tmax, shrinkage = 0.5, gamma = 0.7) {
       cut.singlevar <- unlist(cut.points[[j]])
       for (i in 1:length(cut.singlevar)) {
         split.point <- cut.singlevar[i] 
-        G1 <- sum(g[X[, j] < split.point]) # Nodo a sx
+        G1 <- sum(g[X[, j] < split.point]) # Left node
         H1 <- sum(h[X[, j] < split.point]) 
-        G2 <- sum(g[X[, j] > split.point]) # Nodo a dx
+        G2 <- sum(g[X[, j] > split.point]) # Right node
         H2 <- sum(h[X[, j] > split.point])
         objectives[[j]][i] <- -((G1^2)/H1 + (G2^2)/H2)/2  
         objectives[[j]][i][is.na(objectives[[j]][i])] <- 0
@@ -28,9 +34,9 @@ grad_auc <- function(X, y, Tmax, shrinkage = 0.5, gamma = 0.7) {
   }
   final.result <- data.frame(Var = 0, Split = 0, Score.sx = 0, Score.dx = 0)
   colnames(X) <- paste("x", 1:ncol(X), sep = "")
-  Tp <- sum(y == 1)
-  Tn <- sum(y == -1)
-  f.hat <- rep(0, length(y)) # Previsione inziale, costante = 0 
+  Tp <- sum(y == 1) # Sum of the true positives
+  Tn <- sum(y == -1) # Sum of the true negatives
+  f.hat <- rep(0, length(y)) # Starting guess equal to 0 
   for (t in 1:Tmax) {
     g <- rep(0, length(y))
     h <- rep(0, length(y))
@@ -59,7 +65,7 @@ grad_auc <- function(X, y, Tmax, shrinkage = 0.5, gamma = 0.7) {
     }
     f <- stump(X, y, g, h)
     f.hat <- f.hat + shrinkage*f$y.hat
-    # Per le previsioni su nuovi dati:
+    # Dataset "final.result" to use in the prediction code:
     final.result[t, ] <- c(f$x.sel, f$min.value, f$sc.sx, f$sc.dx)
   }
   final.result[, 2] <- as.numeric(final.result[, 2])
